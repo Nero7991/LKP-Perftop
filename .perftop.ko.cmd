@@ -1,0 +1,1 @@
+cmd_/home/ocollaco/proj3/perftop/perftop.ko := ld -r -EL  -maarch64linux -z norelro --build-id=sha1  -T scripts/module.lds -o /home/ocollaco/proj3/perftop/perftop.ko /home/ocollaco/proj3/perftop/perftop.o /home/ocollaco/proj3/perftop/perftop.mod.o;  true

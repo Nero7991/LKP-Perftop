@@ -1,0 +1,1 @@
+cmd_/home/ocollaco/proj3/perftop/Module.symvers := sed 's/ko$$/o/' /home/ocollaco/proj3/perftop/modules.order | scripts/mod/modpost    -o /home/ocollaco/proj3/perftop/Module.symvers -e -i Module.symvers   -T -
