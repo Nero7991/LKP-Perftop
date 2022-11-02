@@ -11,7 +11,7 @@ obj-m += $(MODULE).o
 ## [M3: point 1]
 #  Set KERNELDIR if not already set to /lib/modules/$(shell uname -r)/build where $(shell uname -r) evalues to kernel version
 #  ...
-KERNELDIR ?= /lib/modules/$(shell uname -r)/build
+KERNELDIR = /lib/modules/$(shell uname -r)/build
 
 ## [M4: point 1]
 #  Set PWD to current working directory

@@ -20,7 +20,7 @@
 
 
 //#define CONFIG_ARM64
-#define DEBUG_ENABLE 1
+#define DEBUG_ENABLE 0
 #define COMPILE_UNUSED_FUNCTIONS 0
 
 /* Declare hash table */
@@ -264,17 +264,27 @@ static void print_rbtree_rev(struct seq_file *m){
 	struct rb_node *node;
 	struct my_rb *this;
 	int i = 1;
-	char st_buf[100];
+	char st_buf[100] = "";
 	for (node = rb_last(&maintree); node; node = rb_prev(node))
 	{
 		this = rb_entry(node, struct my_rb, node);
 		printk(KERN_CONT "%llu, ", this->val);
 		//seq_printf(m, "%d, ", this->val);
+		/* Get stack trace function names in the st_buf */
 		stack_trace_snprint(st_buf, 100, this->st_ptr, STORED_STACK_TRACE_LENGTH, 1);
-		//if(sprint_backtrace_ptr != NULL)
-		//sprint_backtrace_ptr(st_buf, this->st_ptr[0]);
-		seq_printf(m, "func addr = %x", this->st_ptr[0]);
+		
+		
 		seq_printf(m, "\nStack trace\t\t\t\tRank: %d, Jenkins hash: %d, Total time: %llu ticks\n%s", i, this->stack_hash, this->val, st_buf);
+		/* Iterate throught the stored stack address and print */
+		//for (int i = 0; i < STORED_STACK_TRACE_LENGTH; i+=1 ){
+			//seq_printf(m, "\n%p", (void *)this->st_ptr[0]);
+
+			/* Does not work */
+			// if(sprint_backtrace_ptr != NULL)
+			// sprint_backtrace_ptr(st_buf, this->st_ptr[0]);
+			// seq_printf(m, "\n%s", st_buf);
+
+		//}
 		i += 1;
 		if (i > 20)
 			break;
@@ -412,13 +422,13 @@ static int __kprobes handler_pre(struct kprobe *p, struct pt_regs *regs)
 #endif
 #ifdef CONFIG_X86 
 	/* Use the pointer to the rq struct passed as first argument available in r0 register (arm64) */
-	rq = (struct rq*)regs->rdi;
+	rq = (struct rq*)regs->di;
 	/* Use the pointer to the task_struct passed as second argument present in r1 register (arm64)*/
-	ts = (struct task_struct*)regs->rsi;
+	ts = (struct task_struct*)regs->si;
 	
 	#if DEBUG_ENABLE
-	pr_info("<%s> p->addr = 0x%p, pc = 0x%lx, pstate = 0x%lx\n",
-		p->symbol_name, p->addr, (long)regs->pc, (long)regs->pstate);
+	pr_info("<%s> p->addr = 0x%p, ip = %lx, flags = 0x%lx\n",
+	p->symbol_name, p->addr, regs->ip, regs->flags);
 	#endif
 #endif
 	if (ts != NULL){
