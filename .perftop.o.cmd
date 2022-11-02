@@ -4,6 +4,7 @@ source_/home/ocollaco/proj3/perftop/perftop.o := /home/ocollaco/proj3/perftop/pe
 
 deps_/home/ocollaco/proj3/perftop/perftop.o := \
     $(wildcard include/config/ARM64) \
+    $(wildcard include/config/X86) \
   include/linux/compiler-version.h \
     $(wildcard include/config/CC_VERSION_TEXT) \
   include/linux/kconfig.h \
@@ -1026,7 +1027,6 @@ deps_/home/ocollaco/proj3/perftop/perftop.o := \
     $(wildcard include/config/ARCH_USES_HIGH_VMA_FLAGS) \
     $(wildcard include/config/ARCH_HAS_PKEYS) \
     $(wildcard include/config/PPC) \
-    $(wildcard include/config/X86) \
     $(wildcard include/config/PARISC) \
     $(wildcard include/config/SPARC64) \
     $(wildcard include/config/HAVE_ARCH_USERFAULTFD_MINOR) \

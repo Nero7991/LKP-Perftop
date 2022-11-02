@@ -20,7 +20,7 @@
 
 
 //#define CONFIG_ARM64
-#define DEBUG_ENABLE 0
+#define DEBUG_ENABLE 1
 #define COMPILE_UNUSED_FUNCTIONS 0
 
 /* Declare hash table */
@@ -59,16 +59,28 @@ struct my_rb
 };
 
 typedef unsigned int (*stack_trace_save_user_t)(unsigned long *store, unsigned int size);
+typedef int (*sprint_backtrace_t)(char *buffer, unsigned long address);
+typedef unsigned long (*kallsyms_lookup_name_t)(const char *name);
+
 stack_trace_save_user_t stack_trace_save_user_ptr;
+sprint_backtrace_t sprint_backtrace_ptr;
+kallsyms_lookup_name_t kallsyms_lookup_name_ptr;
 
 // static char symbol[] = "proc_reg_open";
 static char symbol[] = "pick_next_task_fair";
-static char symbol_st[] = "stack_trace_save_user";
+static char kallsyms[] = "kallsyms_lookup_name";
+
+
 
 
 /* For each probe you need to allocate a kprobe structure */
 static struct kprobe kp = {
 	.symbol_name	= symbol,
+
+};
+
+static struct kprobe ks = {
+	.symbol_name	= kallsyms,
 
 };
 
@@ -78,6 +90,7 @@ static struct kprobe kp = {
 /* 
  * Based on  https://cpufun.substack.com/p/fun-with-timers-and-cpuid, this should work
  */
+#ifdef CONFIG_ARM64
 static u64 rdtsc(void)
 {
     u64 val;
@@ -93,6 +106,7 @@ static u64 rdtsc(void)
 
     return val;
 }
+#endif
 
 static int insert_rbtree(struct rb_root *root, struct my_rb *entry)
 {
@@ -257,6 +271,9 @@ static void print_rbtree_rev(struct seq_file *m){
 		printk(KERN_CONT "%llu, ", this->val);
 		//seq_printf(m, "%d, ", this->val);
 		stack_trace_snprint(st_buf, 100, this->st_ptr, STORED_STACK_TRACE_LENGTH, 1);
+		//if(sprint_backtrace_ptr != NULL)
+		//sprint_backtrace_ptr(st_buf, this->st_ptr[0]);
+		seq_printf(m, "func addr = %x", this->st_ptr[0]);
 		seq_printf(m, "\nStack trace\t\t\t\tRank: %d, Jenkins hash: %d, Total time: %llu ticks\n%s", i, this->stack_hash, this->val, st_buf);
 		i += 1;
 		if (i > 20)
@@ -291,7 +308,7 @@ struct rb_node *node;
 }
 #endif
 
-
+#if COMPILE_UNUSED_FUNCTIONS
 static void destroy_hash_table_and_free(void)
 {
 	struct hash_entry *ptr;
@@ -310,7 +327,9 @@ static void destroy_hash_table_and_free(void)
 		kfree(ptr);
 	}
 }
+#endif
 
+#if COMPILE_UNUSED_FUNCTIONS
 static void destroy_rbtree_and_free(void)
 {
 #if DEBUG_ENABLE
@@ -330,6 +349,7 @@ static void destroy_rbtree_and_free(void)
 		kfree(this);
 	}
 }
+#endif
 
 /* Called when proc/perftop is accessed */
 static int render_proc_text(struct seq_file *m, void *v)
@@ -347,7 +367,7 @@ static int render_proc_text(struct seq_file *m, void *v)
 	return 0;
 }
 
-
+#if COMPILE_UNUSED_FUNCTIONS
 static void cleanup(void)
 {
 /* Destroy the structures and free its memory */
@@ -358,6 +378,7 @@ static void cleanup(void)
 	destroy_hash_table_and_free();
 	destroy_rbtree_and_free();
 }
+#endif
 
 #define PROC_INVOKE_MONITOR_FILE "perftop"
 #define GET_NAME(x) x->f_path.dentry->d_name.name
@@ -388,6 +409,18 @@ static int __kprobes handler_pre(struct kprobe *p, struct pt_regs *regs)
 	pr_info("<%s> p->addr = 0x%p, pc = 0x%lx, pstate = 0x%lx\n",
 		p->symbol_name, p->addr, (long)regs->pc, (long)regs->pstate);
 	#endif
+#endif
+#ifdef CONFIG_X86 
+	/* Use the pointer to the rq struct passed as first argument available in r0 register (arm64) */
+	rq = (struct rq*)regs->rdi;
+	/* Use the pointer to the task_struct passed as second argument present in r1 register (arm64)*/
+	ts = (struct task_struct*)regs->rsi;
+	
+	#if DEBUG_ENABLE
+	pr_info("<%s> p->addr = 0x%p, pc = 0x%lx, pstate = 0x%lx\n",
+		p->symbol_name, p->addr, (long)regs->pc, (long)regs->pstate);
+	#endif
+#endif
 	if (ts != NULL){
 		/* A new task ts was just scheduled, find the cpu/core it was scheduled on  */
 		cpu = rq->cpu;
@@ -403,7 +436,7 @@ static int __kprobes handler_pre(struct kprobe *p, struct pt_regs *regs)
 			/* Get hash entry using stack hash */
 			entry_ptr = get_hash(stack_hash);
 			/* Check if total_time is non-zero */
-			if(entry_ptr->total_time > 0 || 1){
+			if(entry_ptr->total_time > 0){
 				/* Check if rb tree has this time as key */
 				rb_entry_ptr = search_rbtree(&maintree, entry_ptr->total_time);
 				if(rb_entry_ptr != NULL){
@@ -418,7 +451,7 @@ static int __kprobes handler_pre(struct kprobe *p, struct pt_regs *regs)
 			/* Compute the time the task was scheduled for and add to total*/
 			entry_ptr->total_time += rdtsc() - entry_ptr->sched_time;
 			/* Check if total_time is non-zero */
-			if(entry_ptr->total_time > 0 || 1){
+			if(entry_ptr->total_time > 0){
 				/* Check if rb tree has this time as key */
 				rb_entry_ptr = search_rbtree(&maintree, entry_ptr->total_time);
 				if(rb_entry_ptr != NULL){
@@ -500,7 +533,6 @@ static int __kprobes handler_pre(struct kprobe *p, struct pt_regs *regs)
 		}
 		stored_stack_cpu[cpu] = stored_stack;
 	}
-#endif
 	#if DEBUG_ENABLE
 	pr_info("In handler pre");
 	#endif
@@ -541,6 +573,7 @@ static int __init perftop_init(void)
 {
 	int err = 0;
 	stack_trace_save_user_ptr = NULL;
+	sprint_backtrace_ptr = NULL;
 	/* Creates a pseudo-file in the proc file system */
 	proc_create("perftop", 0, NULL, &perftop_fops);
 
@@ -554,16 +587,34 @@ static int __init perftop_init(void)
 		stored_stack_cpu[i] = NULL;
 	}
 	pr_info("Online CPU count: %d\n", num_online_cpus());
-	kp.symbol_name = symbol_st;
-	err = register_kprobe(&kp);
+	err = register_kprobe(&ks);
 	if (err < 0) {
 		pr_err("register_kprobe failed, returned %d\n", err);
-		/* For some reason, kprope could not find the stack_trace_save_user function (seems like an arm issue) */
-		//return err;
+		#ifdef CONFIG_ARM64
+		return err;
+		#endif
+		#ifdef CONFIG_X86 
+		return err;
+		#endif
 	}
-	stack_trace_save_user_ptr = (stack_trace_save_user_t) kp.addr;
-	unregister_kprobe(&kp);
-	kp.symbol_name = symbol;
+	unregister_kprobe(&ks);
+	kallsyms_lookup_name_ptr = (kallsyms_lookup_name_t) ks.addr;
+	sprint_backtrace_ptr = (sprint_backtrace_t) kallsyms_lookup_name_ptr("sprint_backtrace");
+	if(sprint_backtrace_ptr == 0){
+		pr_err("sprint_backtrace not found");
+	}
+	else{
+		pr_info("sprint_backtrace found at %p\n", sprint_backtrace_ptr);
+	}
+	stack_trace_save_user_ptr = (stack_trace_save_user_t) kallsyms_lookup_name_ptr("stack_trace_save_user");
+	if(stack_trace_save_user_ptr == 0){
+		pr_err("stack_trace_save_user not found");
+	}
+	else{
+		pr_info("stack_trace_save_user found at %p\n", sprint_backtrace_ptr);
+	}
+	
+	
 	err = register_kprobe(&kp);
 	if (err < 0) {
 		pr_err("register_kprobe failed, returned %d\n", err);
